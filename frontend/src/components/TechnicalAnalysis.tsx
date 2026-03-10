@@ -8,7 +8,7 @@ import { Loader2 } from 'lucide-react';
 import type { TechnicalsResponse } from '../types';
 import { fetchTechnicals } from '../api';
 
-const PERIODS = ['3mo', '6mo', '1y', '2y', '5y'] as const;
+const PERIODS = ['3mo', '6mo', '1y', '2y', '3y', '5y'] as const;
 
 interface Props {
   tickers: string[];
@@ -16,7 +16,7 @@ interface Props {
 
 export function TechnicalAnalysis({ tickers }: Props) {
   const [selectedTicker, setSelectedTicker] = useState(tickers[0] ?? '');
-  const [period, setPeriod] = useState<string>('1y');
+  const [period, setPeriod] = useState<string>('3y');
   const [data, setData] = useState<TechnicalsResponse | null>(null);
   const [loading, setLoading] = useState(false);
 

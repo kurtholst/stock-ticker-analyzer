@@ -1,12 +1,22 @@
-"""Stock data fetching and technical analysis via yfinance."""
+"""Stock data fetching and technical analysis via Delta tables.
+
+Reads pre-fetched stock data from Delta tables (populated by a scheduled
+Databricks Job on a classic cluster with internet access).
+"""
 
 from __future__ import annotations
 
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
 import pandas as pd
-import yfinance as yf
 from pydantic import BaseModel
 
+from .db import execute_sql
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -58,7 +68,7 @@ class HistoryResponse(BaseModel):
 
 class TechnicalsRequest(BaseModel):
     ticker: str
-    period: str = "1y"
+    period: str = "3y"
 
 
 class TechnicalsResponse(BaseModel):
@@ -79,80 +89,142 @@ class TechnicalsResponse(BaseModel):
     volume: list[int]
 
 
+class RankRequest(BaseModel):
+    tickers: list[str]
+
+
+class RankRow(BaseModel):
+    ticker: str
+    price: float
+    change_1d: float | None = None
+    change_1w: float | None = None
+    change_1m: float | None = None
+    change_3m: float | None = None
+    rsi14: float | None = None
+    macd_hist: float | None = None
+    bb_pct: float | None = None
+    ma20_dist: float | None = None
+    ma50_dist: float | None = None
+    ma200_dist: float | None = None
+    vol_ratio: float | None = None
+    atr14: float | None = None
+
+
 # ---------------------------------------------------------------------------
-# Data fetching
+# Period mapping (calendar days) and DB helpers
+# ---------------------------------------------------------------------------
+
+_PERIOD_DAYS = {
+    "5d": 5, "1mo": 30, "3mo": 90, "6mo": 180,
+    "1y": 365, "2y": 730, "3y": 1095, "5y": 1825, "max": 9999,
+}
+
+
+def _fetch_ohlcv_from_db(ticker: str, days: int = 1825) -> pd.DataFrame:
+    """Query sta_ohlcv for a ticker, returning a DataFrame indexed by Date."""
+    rows = execute_sql(
+        "SELECT date, open, high, low, close, volume "
+        "FROM workspace.default.sta_ohlcv "
+        f"WHERE ticker = :ticker AND date >= date_sub(current_date(), {int(days)}) "
+        "ORDER BY date",
+        parameters={"ticker": ticker},
+    )
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.set_index("date")
+    df.index.name = "Date"
+    df = df.rename(columns={
+        "open": "Open", "high": "High", "low": "Low",
+        "close": "Close", "volume": "Volume",
+    })
+    # Ensure correct types (db.py casts, but be defensive)
+    for col in ("Open", "High", "Low", "Close"):
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["Volume"] = pd.to_numeric(df["Volume"], errors="coerce").fillna(0).astype(int)
+    return df.dropna(subset=["Close"])
+
+
+# ---------------------------------------------------------------------------
+# Data fetching (from Delta tables)
 # ---------------------------------------------------------------------------
 
 def validate_ticker(ticker: str) -> bool:
-    try:
-        t = yf.Ticker(ticker)
-        info = t.info
-        return info.get("regularMarketPrice") is not None or info.get("currentPrice") is not None
-    except Exception:
-        return False
+    """Validate ticker format (regex only — no internet needed)."""
+    return bool(re.match(r'^[A-Za-z0-9][A-Za-z0-9\-\.]{0,14}$', ticker))
 
 
 def get_quote(ticker: str) -> QuoteData:
-    t = yf.Ticker(ticker)
-    info = t.info
+    """Get current quote from sta_quotes + sparkline from sta_ohlcv."""
+    rows = execute_sql(
+        "SELECT * FROM workspace.default.sta_quotes WHERE ticker = :ticker",
+        parameters={"ticker": ticker},
+    )
 
-    price = info.get("regularMarketPrice") or info.get("currentPrice") or 0.0
-    prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose") or price
-    change = price - prev_close
-    change_pct = (change / prev_close * 100) if prev_close else 0.0
+    # Sparkline from last 30 days of OHLCV
+    ohlcv_rows = execute_sql(
+        "SELECT close FROM workspace.default.sta_ohlcv "
+        "WHERE ticker = :ticker AND date >= date_sub(current_date(), 30) "
+        "ORDER BY date",
+        parameters={"ticker": ticker},
+    )
+    sparkline = [float(r["close"]) for r in ohlcv_rows]
 
-    # Sparkline: 30 days of closing prices (drop NaN)
-    hist = t.history(period="1mo")
-    sparkline = hist["Close"].dropna().tolist() if not hist.empty else []
+    if not rows:
+        # Placeholder until the next job run populates data
+        return QuoteData(
+            ticker=ticker, name=ticker, price=0.0,
+            change=0.0, change_pct=0.0,
+            day_high=0.0, day_low=0.0,
+            week52_high=0.0, week52_low=0.0,
+            sparkline=sparkline,
+        )
 
+    row = rows[0]
     return QuoteData(
-        ticker=ticker,
-        name=info.get("shortName") or info.get("longName") or ticker,
-        price=price,
-        change=round(change, 2),
-        change_pct=round(change_pct, 2),
-        day_high=info.get("dayHigh") or info.get("regularMarketDayHigh") or 0.0,
-        day_low=info.get("dayLow") or info.get("regularMarketDayLow") or 0.0,
-        week52_high=info.get("fiftyTwoWeekHigh") or 0.0,
-        week52_low=info.get("fiftyTwoWeekLow") or 0.0,
-        market_cap=info.get("marketCap"),
-        volume=info.get("volume") or info.get("regularMarketVolume"),
+        ticker=row["ticker"],
+        name=row.get("name") or ticker,
+        price=float(row["price"]),
+        change=float(row["change"]),
+        change_pct=float(row["change_pct"]),
+        day_high=float(row["day_high"]),
+        day_low=float(row["day_low"]),
+        week52_high=float(row["week52_high"]),
+        week52_low=float(row["week52_low"]),
+        market_cap=float(row["market_cap"]) if row.get("market_cap") else None,
+        volume=int(row["volume"]) if row.get("volume") else None,
         sparkline=sparkline,
     )
 
 
-# Map display period to a fetch period with enough history for MA 200
-_FETCH_PERIOD = {"5d": "2y", "1mo": "2y", "3mo": "2y", "6mo": "2y", "1y": "2y", "2y": "5y", "5y": "max"}
-
-
 def _fetch_one_ticker(ticker: str, period: str) -> TickerHistory | None:
-    """Fetch history for a single ticker (designed to run in a thread)."""
+    """Fetch history for a single ticker from Delta table."""
     try:
-        t = yf.Ticker(ticker)
+        display_days = _PERIOD_DAYS.get(period, 30)
+        # Fetch enough extra data for MA-200 computation
+        fetch_days = max(display_days + 250, 500)
 
-        # Fetch extra history so MAs have enough data points
-        fetch_period = _FETCH_PERIOD.get(period, "2y")
-        full_hist = t.history(period=fetch_period)
+        full_hist = _fetch_ohlcv_from_db(ticker, fetch_days)
         if full_hist.empty:
             return None
 
-        full_hist = full_hist.dropna(subset=["Close"])
-        if full_hist.empty:
-            return None
-
-        # Also fetch the display period to know which dates to show
-        display_hist = t.history(period=period)
-        display_hist = display_hist.dropna(subset=["Close"])
-        if display_hist.empty:
-            return None
-        display_n = len(display_hist)
-
-        # Compute indicators on the full history
+        # Compute indicators on full history
         close_series = full_hist["Close"]
         pct_change = close_series.pct_change() * 100
         ma20 = close_series.rolling(window=20).mean()
         ma50 = close_series.rolling(window=50).mean()
         ma200 = close_series.rolling(window=200).mean()
+
+        # Determine display window using calendar days
+        if display_days < 9999:
+            cutoff = pd.Timestamp.now() - pd.Timedelta(days=display_days)
+            display_n = int((full_hist.index >= cutoff).sum())
+        else:
+            display_n = len(full_hist)
+
+        if display_n == 0:
+            display_n = len(full_hist)
 
         # Trim to display window (last N rows)
         full_hist = full_hist.iloc[-display_n:]
@@ -192,12 +264,11 @@ def _fetch_one_ticker(ticker: str, period: str) -> TickerHistory | None:
 
         return TickerHistory(ticker=ticker, data=rows, normalized=normalized)
     except Exception:
+        logger.exception("Failed to fetch history for %s", ticker)
         return None
 
 
 def get_history(request: HistoryRequest) -> HistoryResponse:
-    from concurrent.futures import ThreadPoolExecutor
-
     with ThreadPoolExecutor(max_workers=len(request.tickers)) as pool:
         futures = [pool.submit(_fetch_one_ticker, t, request.period) for t in request.tickers]
         results = [f.result() for f in futures]
@@ -253,8 +324,10 @@ def _macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
 
 
 def get_technicals(request: TechnicalsRequest) -> TechnicalsResponse:
-    t = yf.Ticker(request.ticker)
-    hist = t.history(period=request.period)
+    period_days = _PERIOD_DAYS.get(request.period, 1095)
+    hist = _fetch_ohlcv_from_db(request.ticker, period_days)
+    if hist.empty:
+        raise ValueError(f"No OHLCV data for {request.ticker}")
 
     close = hist["Close"]
     dates = [d.strftime("%Y-%m-%d") for d in hist.index]
@@ -279,3 +352,99 @@ def get_technicals(request: TechnicalsRequest) -> TechnicalsResponse:
         macd_hist=macd_hist,
         volume=[int(v) for v in hist["Volume"]],
     )
+
+
+# ---------------------------------------------------------------------------
+# Rank (one-row-per-ticker snapshot)
+# ---------------------------------------------------------------------------
+
+def _fetch_rank_row(ticker: str) -> RankRow | None:
+    """Compute a single RankRow from 1y daily data."""
+    try:
+        hist = _fetch_ohlcv_from_db(ticker, 365)
+        if hist.empty or len(hist) < 2:
+            return None
+
+        close = hist["Close"]
+        volume = hist["Volume"]
+        high = hist["High"]
+        low = hist["Low"]
+        n = len(close)
+
+        latest_close = round(float(close.iloc[-1]), 2)
+
+        def _pct_return(days: int) -> float | None:
+            if n <= days:
+                return None
+            prev = float(close.iloc[-1 - days])
+            return round((latest_close - prev) / prev * 100, 2) if prev else None
+
+        # RSI 14
+        rsi_vals = _rsi(close)
+        rsi14 = rsi_vals[-1] if rsi_vals and rsi_vals[-1] is not None else None
+
+        # MACD histogram
+        _, _, macd_h = _macd(close)
+        macd_hist_val = macd_h[-1] if macd_h and macd_h[-1] is not None else None
+
+        # Bollinger %B
+        bb_u, _, bb_l = _bollinger(close)
+        bb_upper_val = bb_u[-1]
+        bb_lower_val = bb_l[-1]
+        bb_pct = None
+        if bb_upper_val is not None and bb_lower_val is not None and bb_upper_val != bb_lower_val:
+            bb_pct = round((latest_close - bb_lower_val) / (bb_upper_val - bb_lower_val) * 100, 2)
+
+        # MA distances
+        ma20 = close.rolling(20).mean()
+        ma50 = close.rolling(50).mean()
+        ma200 = close.rolling(200).mean()
+
+        def _ma_dist(ma: pd.Series) -> float | None:
+            v = ma.iloc[-1]
+            if pd.isna(v) or v == 0:
+                return None
+            return round((latest_close - v) / v * 100, 2)
+
+        # Volume ratio (current / 20-day avg)
+        vol_sma20 = volume.rolling(20).mean()
+        last_vol = float(volume.iloc[-1])
+        last_vol_avg = float(vol_sma20.iloc[-1]) if not pd.isna(vol_sma20.iloc[-1]) else None
+        vol_ratio = round(last_vol / last_vol_avg, 2) if last_vol_avg and last_vol_avg > 0 else None
+
+        # ATR 14
+        tr = pd.concat([
+            high - low,
+            (high - close.shift(1)).abs(),
+            (low - close.shift(1)).abs(),
+        ], axis=1).max(axis=1)
+        atr = tr.rolling(14).mean()
+        atr14 = round(float(atr.iloc[-1]), 2) if not pd.isna(atr.iloc[-1]) else None
+
+        return RankRow(
+            ticker=ticker,
+            price=latest_close,
+            change_1d=_pct_return(1),
+            change_1w=_pct_return(5),
+            change_1m=_pct_return(21),
+            change_3m=_pct_return(63),
+            rsi14=rsi14,
+            macd_hist=macd_hist_val,
+            bb_pct=bb_pct,
+            ma20_dist=_ma_dist(ma20),
+            ma50_dist=_ma_dist(ma50),
+            ma200_dist=_ma_dist(ma200),
+            vol_ratio=vol_ratio,
+            atr14=atr14,
+        )
+    except Exception:
+        logger.exception("Failed to fetch rank for %s", ticker)
+        return None
+
+
+def get_rank(request: RankRequest) -> list[RankRow]:
+    with ThreadPoolExecutor(max_workers=len(request.tickers)) as pool:
+        futures = [pool.submit(_fetch_rank_row, t) for t in request.tickers]
+        results = [f.result() for f in futures]
+
+    return [r for r in results if r is not None]

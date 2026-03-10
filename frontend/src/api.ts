@@ -1,9 +1,17 @@
-import type { QuoteData, HistoryResponse, TechnicalsResponse, ChatResponseData } from './types';
+import type { QuoteData, HistoryResponse, TechnicalsResponse, ChatResponseData, RankRow } from './types';
 
-export async function fetchDefaults(): Promise<{ tickers: string[] }> {
-  const res = await fetch('/api/defaults');
-  if (!res.ok) throw new Error('Failed to fetch defaults');
+export async function fetchTickers(): Promise<{ tickers: string[] }> {
+  const res = await fetch('/api/tickers');
+  if (!res.ok) throw new Error('Failed to fetch tickers');
   return res.json();
+}
+
+export async function saveTickers(tickers: string[]): Promise<void> {
+  await fetch('/api/tickers', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tickers }),
+  });
 }
 
 export async function fetchQuote(ticker: string): Promise<QuoteData> {
@@ -35,6 +43,16 @@ export async function fetchTechnicals(ticker: string, period: string): Promise<T
     body: JSON.stringify({ ticker, period }),
   });
   if (!res.ok) throw new Error('Failed to fetch technicals');
+  return res.json();
+}
+
+export async function fetchRank(tickers: string[]): Promise<RankRow[]> {
+  const res = await fetch('/api/rank', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tickers }),
+  });
+  if (!res.ok) throw new Error('Failed to fetch rank data');
   return res.json();
 }
 

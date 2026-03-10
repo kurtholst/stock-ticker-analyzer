@@ -13,3 +13,7 @@ resources:
     serving_endpoint:
       name: databricks-gpt-5-2
       permission: CAN_QUERY
+  - name: sql-warehouse
+    sql_warehouse:
+      name: Serverless Starter Warehouse
+      permission: CAN_USE

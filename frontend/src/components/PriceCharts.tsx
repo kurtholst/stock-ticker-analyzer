@@ -8,7 +8,7 @@ import type { HistoryResponse } from '../types';
 import { fetchHistory } from '../api';
 import { getTickerColor, formatPrice } from '../utils';
 
-const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y', '5y'] as const;
+const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y', '3y', '5y'] as const;
 
 interface Props {
   tickers: string[];

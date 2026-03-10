@@ -1,15 +1,52 @@
+import { useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer } from 'recharts';
+import { Save, Check } from 'lucide-react';
 import type { QuoteData } from '../types';
 import { formatPrice, formatPct, formatCompact, getTickerColor } from '../utils';
 
 interface Props {
   tickers: string[];
   quotes: Map<string, QuoteData>;
+  dirty: boolean;
+  onSave: () => Promise<void>;
 }
 
-export function Dashboard({ tickers, quotes }: Props) {
+export function Dashboard({ tickers, quotes, dirty, onSave }: Props) {
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div>
+      {/* Save bar */}
+      <div className="flex items-center justify-end mb-4">
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            saved
+              ? 'bg-green-100 text-green-700'
+              : dirty
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          }`}
+        >
+          {saved ? <Check size={16} /> : <Save size={16} />}
+          {saving ? 'Saving...' : saved ? 'Saved' : 'Save tickers'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       {tickers.map((ticker, i) => {
         const q = quotes.get(ticker);
         if (!q) {
@@ -103,6 +140,7 @@ export function Dashboard({ tickers, quotes }: Props) {
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

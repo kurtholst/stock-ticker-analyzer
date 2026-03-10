@@ -55,6 +55,23 @@ export interface TechnicalsResponse {
   volume: number[];
 }
 
+export interface RankRow {
+  ticker: string;
+  price: number;
+  change_1d: number | null;
+  change_1w: number | null;
+  change_1m: number | null;
+  change_3m: number | null;
+  rsi14: number | null;
+  macd_hist: number | null;
+  bb_pct: number | null;
+  ma20_dist: number | null;
+  ma50_dist: number | null;
+  ma200_dist: number | null;
+  vol_ratio: number | null;
+  atr14: number | null;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;

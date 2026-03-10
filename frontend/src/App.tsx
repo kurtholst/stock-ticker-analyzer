@@ -1,25 +1,32 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PanelLeftClose, PanelLeftOpen, TrendingUp } from 'lucide-react';
 import type { QuoteData } from './types';
-import { fetchDefaults, fetchQuote } from './api';
+import { fetchTickers, saveTickers, fetchQuote } from './api';
 import { TickerSidebar } from './components/TickerSidebar';
 import { Dashboard } from './components/Dashboard';
 import { PriceCharts } from './components/PriceCharts';
 import { TechnicalAnalysis } from './components/TechnicalAnalysis';
 import { DataTable } from './components/DataTable';
+import { RankTable } from './components/RankTable';
 import { AiInsightsPanel } from './components/AiInsightsPanel';
 
-type Tab = 'dashboard' | 'charts' | 'technicals' | 'table' | 'ai';
+type Tab = 'dashboard' | 'charts' | 'technicals' | 'table' | 'rank' | 'ai';
 
 export default function App() {
   const [tickers, setTickers] = useState<string[]>([]);
   const [quotes, setQuotes] = useState<Map<string, QuoteData>>(new Map());
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const savedTickersRef = useRef<string[]>([]);
+  const [dirty, setDirty] = useState(false);
 
-  // Load default tickers on mount
+  // Load tickers from server on mount (always reads fresh from tickers.yaml)
   useEffect(() => {
-    fetchDefaults().then((d) => setTickers(d.tickers));
+    fetchTickers().then((d) => {
+      setTickers(d.tickers);
+      savedTickersRef.current = d.tickers;
+      setDirty(false);
+    });
   }, []);
 
   // Fetch quotes when tickers change
@@ -44,17 +51,31 @@ export default function App() {
   }, [tickers]);
 
   const handleAddTicker = useCallback((ticker: string) => {
-    setTickers((prev) => [...prev, ticker]);
+    setTickers((prev) => {
+      const next = [...prev, ticker];
+      setDirty(JSON.stringify(next) !== JSON.stringify(savedTickersRef.current));
+      return next;
+    });
   }, []);
 
   const handleRemoveTicker = useCallback((ticker: string) => {
-    setTickers((prev) => prev.filter((t) => t !== ticker));
+    setTickers((prev) => {
+      const next = prev.filter((t) => t !== ticker);
+      setDirty(JSON.stringify(next) !== JSON.stringify(savedTickersRef.current));
+      return next;
+    });
     setQuotes((prev) => {
       const next = new Map(prev);
       next.delete(ticker);
       return next;
     });
   }, []);
+
+  const handleSaveTickers = useCallback(async () => {
+    await saveTickers(tickers);
+    savedTickersRef.current = tickers;
+    setDirty(false);
+  }, [tickers]);
 
   if (tickers.length === 0) {
     return (
@@ -69,6 +90,7 @@ export default function App() {
     { id: 'charts', label: 'Charts' },
     { id: 'technicals', label: 'Technical Analysis' },
     { id: 'table', label: 'Data Table' },
+    { id: 'rank', label: 'Rank' },
     { id: 'ai', label: 'AI Insights' },
   ];
 
@@ -120,10 +142,11 @@ export default function App() {
 
           {/* Tab content */}
           <div className="flex-1 overflow-auto p-4">
-            {activeTab === 'dashboard' && <Dashboard tickers={tickers} quotes={quotes} />}
+            {activeTab === 'dashboard' && <Dashboard tickers={tickers} quotes={quotes} dirty={dirty} onSave={handleSaveTickers} />}
             {activeTab === 'charts' && <PriceCharts tickers={tickers} />}
             {activeTab === 'technicals' && <TechnicalAnalysis tickers={tickers} />}
             {activeTab === 'table' && <DataTable tickers={tickers} />}
+            {activeTab === 'rank' && <RankTable tickers={tickers} />}
             {activeTab === 'ai' && <AiInsightsPanel tickers={tickers} quotes={quotes} />}
           </div>
         </main>

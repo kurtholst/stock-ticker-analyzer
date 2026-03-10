@@ -4,7 +4,7 @@ import type { HistoryResponse, OHLCVRow } from '../types';
 import { fetchHistory } from '../api';
 import { formatPrice, formatPct, getTickerColor } from '../utils';
 
-const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y'] as const;
+const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y', '3y'] as const;
 
 type SortKey = 'date' | 'ticker' | 'open' | 'high' | 'low' | 'close' | 'volume' | 'change_pct' | 'ma20' | 'ma50' | 'ma200';
 
