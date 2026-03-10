@@ -1,0 +1,14 @@
+[project]
+name = "stock-ticker-analyzer"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2.0",
+    "numpy",
+    "pandas",
+    "yfinance",
+    "openai>=1.0",
+    "databricks-sdk",
+]
