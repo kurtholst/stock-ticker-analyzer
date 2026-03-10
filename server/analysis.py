@@ -117,20 +117,15 @@ def get_quote(ticker: str) -> QuoteData:
     )
 
 
-def get_history(request: HistoryRequest) -> HistoryResponse:
-    all_dates: list[str] = []
-    ticker_histories: list[TickerHistory] = []
-
-    for ticker in request.tickers:
+def _fetch_one_ticker(ticker: str, period: str) -> TickerHistory | None:
+    """Fetch history for a single ticker (designed to run in a thread)."""
+    try:
         t = yf.Ticker(ticker)
-        hist = t.history(period=request.period)
+        hist = t.history(period=period)
         if hist.empty:
-            continue
+            return None
 
         dates = [d.strftime("%Y-%m-%d") for d in hist.index]
-        if not all_dates:
-            all_dates = dates
-
         closes = hist["Close"].tolist()
         base = closes[0] if closes else 1.0
         normalized = [round((c / base - 1) * 100, 2) for c in closes]
@@ -147,7 +142,20 @@ def get_history(request: HistoryRequest) -> HistoryResponse:
             for d, row in zip(dates, hist.itertuples())
         ]
 
-        ticker_histories.append(TickerHistory(ticker=ticker, data=rows, normalized=normalized))
+        return TickerHistory(ticker=ticker, data=rows, normalized=normalized)
+    except Exception:
+        return None
+
+
+def get_history(request: HistoryRequest) -> HistoryResponse:
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=len(request.tickers)) as pool:
+        futures = [pool.submit(_fetch_one_ticker, t, request.period) for t in request.tickers]
+        results = [f.result() for f in futures]
+
+    ticker_histories = [r for r in results if r is not None]
+    all_dates = ticker_histories[0].data and [row.date for row in ticker_histories[0].data] if ticker_histories else []
 
     return HistoryResponse(tickers=ticker_histories, dates=all_dates)
 

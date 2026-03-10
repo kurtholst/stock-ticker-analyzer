@@ -20,7 +20,7 @@ export function DataTable({ tickers }: Props) {
   const [period, setPeriod] = useState<string>('1mo');
   const [filterTicker, setFilterTicker] = useState<string>('all');
   const [data, setData] = useState<HistoryResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -101,48 +101,55 @@ export function DataTable({ tickers }: Props) {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 sticky top-0">
-              <tr>
-                {(['date', 'ticker', 'open', 'high', 'low', 'close', 'volume'] as SortKey[]).map((col) => (
-                  <th
-                    key={col}
-                    onClick={() => handleSort(col)}
-                    className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none"
-                  >
-                    <div className="flex items-center gap-1">
-                      {col} <SortIcon col={col} />
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((row, i) => (
-                <tr key={`${row.ticker}-${row.date}-${i}`} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{row.date}</td>
-                  <td className="px-4 py-2 whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: getTickerColor(row.ticker, tickers.indexOf(row.ticker)) }}
-                      />
-                      <span className="font-medium text-gray-800">{row.ticker}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.open)}</td>
-                  <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.high)}</td>
-                  <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.low)}</td>
-                  <td className="px-4 py-2 font-medium text-gray-900 tabular-nums">{formatPrice(row.close)}</td>
-                  <td className="px-4 py-2 text-gray-600 tabular-nums">{row.volume.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {loading && filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-20">
+          <Loader2 size={32} className="animate-spin text-blue-500 mb-3" />
+          <p className="text-sm text-gray-500">Loading OHLCV data for {tickers.length} tickers...</p>
         </div>
-      </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  {(['date', 'ticker', 'open', 'high', 'low', 'close', 'volume'] as SortKey[]).map((col) => (
+                    <th
+                      key={col}
+                      onClick={() => handleSort(col)}
+                      className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none"
+                    >
+                      <div className="flex items-center gap-1">
+                        {col} <SortIcon col={col} />
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((row, i) => (
+                  <tr key={`${row.ticker}-${row.date}-${i}`} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{row.date}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: getTickerColor(row.ticker, tickers.indexOf(row.ticker)) }}
+                        />
+                        <span className="font-medium text-gray-800">{row.ticker}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.open)}</td>
+                    <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.high)}</td>
+                    <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.low)}</td>
+                    <td className="px-4 py-2 font-medium text-gray-900 tabular-nums">{formatPrice(row.close)}</td>
+                    <td className="px-4 py-2 text-gray-600 tabular-nums">{row.volume.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
