@@ -97,9 +97,9 @@ def get_quote(ticker: str) -> QuoteData:
     change = price - prev_close
     change_pct = (change / prev_close * 100) if prev_close else 0.0
 
-    # Sparkline: 30 days of closing prices
+    # Sparkline: 30 days of closing prices (drop NaN)
     hist = t.history(period="1mo")
-    sparkline = hist["Close"].tolist() if not hist.empty else []
+    sparkline = hist["Close"].dropna().tolist() if not hist.empty else []
 
     return QuoteData(
         ticker=ticker,
@@ -125,19 +125,27 @@ def _fetch_one_ticker(ticker: str, period: str) -> TickerHistory | None:
         if hist.empty:
             return None
 
+        # Drop rows with NaN close prices (weekends, holidays, pre-market)
+        hist = hist.dropna(subset=["Close"])
+        if hist.empty:
+            return None
+
         dates = [d.strftime("%Y-%m-%d") for d in hist.index]
         closes = hist["Close"].tolist()
         base = closes[0] if closes else 1.0
         normalized = [round((c / base - 1) * 100, 2) for c in closes]
 
+        def _safe(v: float) -> float:
+            return 0.0 if pd.isna(v) else round(v, 2)
+
         rows = [
             OHLCVRow(
                 date=d,
-                open=round(row.Open, 2),
-                high=round(row.High, 2),
-                low=round(row.Low, 2),
-                close=round(row.Close, 2),
-                volume=int(row.Volume),
+                open=_safe(row.Open),
+                high=_safe(row.High),
+                low=_safe(row.Low),
+                close=_safe(row.Close),
+                volume=int(row.Volume) if not pd.isna(row.Volume) else 0,
             )
             for d, row in zip(dates, hist.itertuples())
         ]
