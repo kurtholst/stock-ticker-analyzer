@@ -11,5 +11,5 @@ command:
 resources:
   - name: serving-endpoint
     serving_endpoint:
-      name: databricks-gpt-5.2
+      name: databricks-gpt-5-2
       permission: CAN_QUERY

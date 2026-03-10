@@ -57,7 +57,7 @@ SYSTEM_PROMPT = """You are a knowledgeable stock market analyst integrated into 
 # Databricks auth + OpenAI client
 # ---------------------------------------------------------------------------
 
-MODEL = "databricks-gpt-5.2"
+MODEL = "databricks-gpt-5-2"
 
 
 def _get_client() -> OpenAI:
