@@ -20,6 +20,10 @@ export interface OHLCVRow {
   low: number;
   close: number;
   volume: number;
+  change_pct: number | null;
+  ma20: number | null;
+  ma50: number | null;
+  ma200: number | null;
 }
 
 export interface TickerHistory {

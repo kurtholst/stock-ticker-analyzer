@@ -2,11 +2,25 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react';
 import type { HistoryResponse, OHLCVRow } from '../types';
 import { fetchHistory } from '../api';
-import { formatPrice, getTickerColor } from '../utils';
+import { formatPrice, formatPct, getTickerColor } from '../utils';
 
 const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y'] as const;
 
-type SortKey = 'date' | 'ticker' | 'open' | 'high' | 'low' | 'close' | 'volume';
+type SortKey = 'date' | 'ticker' | 'open' | 'high' | 'low' | 'close' | 'volume' | 'change_pct' | 'ma20' | 'ma50' | 'ma200';
+
+const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'date', label: 'date' },
+  { key: 'ticker', label: 'ticker' },
+  { key: 'open', label: 'open' },
+  { key: 'high', label: 'high' },
+  { key: 'low', label: 'low' },
+  { key: 'close', label: 'close' },
+  { key: 'change_pct', label: '% chg' },
+  { key: 'volume', label: 'volume' },
+  { key: 'ma20', label: 'ma 20' },
+  { key: 'ma50', label: 'ma 50' },
+  { key: 'ma200', label: 'ma 200' },
+];
 
 interface TableRow extends OHLCVRow {
   ticker: string;
@@ -49,6 +63,10 @@ export function DataTable({ tickers }: Props) {
     result = [...result].sort((a, b) => {
       const av = a[sortKey];
       const bv = b[sortKey];
+      // Nulls sort last
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
       if (typeof av === 'string' && typeof bv === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
       return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
@@ -67,6 +85,41 @@ export function DataTable({ tickers }: Props) {
   const SortIcon = ({ col }: { col: SortKey }) => {
     if (sortKey !== col) return <ArrowUpDown size={12} className="text-gray-300" />;
     return sortAsc ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
+  };
+
+  const renderCell = (row: TableRow, col: SortKey) => {
+    switch (col) {
+      case 'date':
+        return <span className="text-gray-600 whitespace-nowrap">{row.date}</span>;
+      case 'ticker':
+        return (
+          <div className="flex items-center gap-1.5">
+            <div
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: getTickerColor(row.ticker, tickers.indexOf(row.ticker)) }}
+            />
+            <span className="font-medium text-gray-800">{row.ticker}</span>
+          </div>
+        );
+      case 'change_pct': {
+        if (row.change_pct == null) return <span className="text-gray-300">—</span>;
+        const isUp = row.change_pct >= 0;
+        return <span className={isUp ? 'text-green-600' : 'text-red-600'}>{formatPct(row.change_pct)}</span>;
+      }
+      case 'ma20':
+      case 'ma50':
+      case 'ma200': {
+        const v = row[col];
+        if (v == null) return <span className="text-gray-300">—</span>;
+        return <span className="text-gray-600">{formatPrice(v)}</span>;
+      }
+      case 'volume':
+        return <span className="text-gray-600 tabular-nums">{row.volume.toLocaleString()}</span>;
+      case 'close':
+        return <span className="font-medium text-gray-900 tabular-nums">{formatPrice(row.close)}</span>;
+      default:
+        return <span className="text-gray-700 tabular-nums">{formatPrice(row[col] as number)}</span>;
+    }
   };
 
   return (
@@ -104,7 +157,7 @@ export function DataTable({ tickers }: Props) {
       {loading && filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-20">
           <Loader2 size={32} className="animate-spin text-blue-500 mb-3" />
-          <p className="text-sm text-gray-500">Loading OHLCV data for {tickers.length} tickers...</p>
+          <p className="text-sm text-gray-500">Loading data for {tickers.length} tickers...</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -112,14 +165,14 @@ export function DataTable({ tickers }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  {(['date', 'ticker', 'open', 'high', 'low', 'close', 'volume'] as SortKey[]).map((col) => (
+                  {COLUMNS.map(({ key, label }) => (
                     <th
-                      key={col}
-                      onClick={() => handleSort(col)}
-                      className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none"
+                      key={key}
+                      onClick={() => handleSort(key)}
+                      className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none whitespace-nowrap"
                     >
                       <div className="flex items-center gap-1">
-                        {col} <SortIcon col={col} />
+                        {label} <SortIcon col={key} />
                       </div>
                     </th>
                   ))}
@@ -128,21 +181,11 @@ export function DataTable({ tickers }: Props) {
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((row, i) => (
                   <tr key={`${row.ticker}-${row.date}-${i}`} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 text-gray-600 whitespace-nowrap">{row.date}</td>
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <div
-                          className="w-1.5 h-1.5 rounded-full"
-                          style={{ backgroundColor: getTickerColor(row.ticker, tickers.indexOf(row.ticker)) }}
-                        />
-                        <span className="font-medium text-gray-800">{row.ticker}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.open)}</td>
-                    <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.high)}</td>
-                    <td className="px-4 py-2 text-gray-700 tabular-nums">{formatPrice(row.low)}</td>
-                    <td className="px-4 py-2 font-medium text-gray-900 tabular-nums">{formatPrice(row.close)}</td>
-                    <td className="px-4 py-2 text-gray-600 tabular-nums">{row.volume.toLocaleString()}</td>
+                    {COLUMNS.map(({ key }) => (
+                      <td key={key} className="px-4 py-2 whitespace-nowrap tabular-nums">
+                        {renderCell(row, key)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

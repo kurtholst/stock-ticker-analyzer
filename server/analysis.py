@@ -39,6 +39,10 @@ class OHLCVRow(BaseModel):
     low: float
     close: float
     volume: int
+    change_pct: float | None = None
+    ma20: float | None = None
+    ma50: float | None = None
+    ma200: float | None = None
 
 
 class TickerHistory(BaseModel):
@@ -117,26 +121,56 @@ def get_quote(ticker: str) -> QuoteData:
     )
 
 
+# Map display period to a fetch period with enough history for MA 200
+_FETCH_PERIOD = {"5d": "2y", "1mo": "2y", "3mo": "2y", "6mo": "2y", "1y": "2y", "2y": "5y", "5y": "max"}
+
+
 def _fetch_one_ticker(ticker: str, period: str) -> TickerHistory | None:
     """Fetch history for a single ticker (designed to run in a thread)."""
     try:
         t = yf.Ticker(ticker)
-        hist = t.history(period=period)
-        if hist.empty:
+
+        # Fetch extra history so MAs have enough data points
+        fetch_period = _FETCH_PERIOD.get(period, "2y")
+        full_hist = t.history(period=fetch_period)
+        if full_hist.empty:
             return None
 
-        # Drop rows with NaN close prices (weekends, holidays, pre-market)
-        hist = hist.dropna(subset=["Close"])
-        if hist.empty:
+        full_hist = full_hist.dropna(subset=["Close"])
+        if full_hist.empty:
             return None
 
-        dates = [d.strftime("%Y-%m-%d") for d in hist.index]
-        closes = hist["Close"].tolist()
+        # Also fetch the display period to know which dates to show
+        display_hist = t.history(period=period)
+        display_hist = display_hist.dropna(subset=["Close"])
+        if display_hist.empty:
+            return None
+        display_n = len(display_hist)
+
+        # Compute indicators on the full history
+        close_series = full_hist["Close"]
+        pct_change = close_series.pct_change() * 100
+        ma20 = close_series.rolling(window=20).mean()
+        ma50 = close_series.rolling(window=50).mean()
+        ma200 = close_series.rolling(window=200).mean()
+
+        # Trim to display window (last N rows)
+        full_hist = full_hist.iloc[-display_n:]
+        pct_change = pct_change.iloc[-display_n:]
+        ma20 = ma20.iloc[-display_n:]
+        ma50 = ma50.iloc[-display_n:]
+        ma200 = ma200.iloc[-display_n:]
+
+        dates = [d.strftime("%Y-%m-%d") for d in full_hist.index]
+        closes = full_hist["Close"].tolist()
         base = closes[0] if closes else 1.0
         normalized = [round((c / base - 1) * 100, 2) for c in closes]
 
         def _safe(v: float) -> float:
             return 0.0 if pd.isna(v) else round(v, 2)
+
+        def _safe_or_none(v: float) -> float | None:
+            return None if pd.isna(v) else round(v, 2)
 
         rows = [
             OHLCVRow(
@@ -146,8 +180,14 @@ def _fetch_one_ticker(ticker: str, period: str) -> TickerHistory | None:
                 low=_safe(row.Low),
                 close=_safe(row.Close),
                 volume=int(row.Volume) if not pd.isna(row.Volume) else 0,
+                change_pct=_safe_or_none(pct),
+                ma20=_safe_or_none(m20),
+                ma50=_safe_or_none(m50),
+                ma200=_safe_or_none(m200),
             )
-            for d, row in zip(dates, hist.itertuples())
+            for d, row, pct, m20, m50, m200 in zip(
+                dates, full_hist.itertuples(), pct_change, ma20, ma50, ma200
+            )
         ]
 
         return TickerHistory(ticker=ticker, data=rows, normalized=normalized)
