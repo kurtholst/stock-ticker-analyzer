@@ -3,10 +3,14 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
+  base: '/stock/',
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      '/stock/api': {
+        target: 'http://localhost:8000',
+        rewrite: (path) => path.replace(/^\/stock/, ''),
+      },
     },
   },
 })
