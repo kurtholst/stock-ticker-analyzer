@@ -7,3 +7,6 @@ frontend/dist/
 .env
 uv.lock
 .DS_Store
+
+# Local tool state
+.isaac/
