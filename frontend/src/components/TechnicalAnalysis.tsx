@@ -7,6 +7,7 @@ import {
 import { Loader2 } from 'lucide-react';
 import type { TechnicalsResponse } from '../types';
 import { fetchTechnicals } from '../api';
+import { formatPrice } from '../utils';
 
 const PERIODS = ['3mo', '6mo', '1y', '2y', '3y', '5y'] as const;
 
@@ -105,7 +106,34 @@ export function TechnicalAnalysis({ tickers }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
                 <YAxis tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
-                <Tooltip />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const items = [
+                      { key: 'close', label: 'Close', color: '#1f2937' },
+                      { key: 'sma20', label: 'SMA 20', color: '#3b82f6' },
+                      { key: 'sma50', label: 'SMA 50', color: '#f59e0b' },
+                      { key: 'bb_upper', label: 'BB Upper', color: '#818cf8' },
+                      { key: 'bb_lower', label: 'BB Lower', color: '#818cf8' },
+                    ];
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                        <div className="font-semibold text-gray-700 mb-1">{label}</div>
+                        {items.map(({ key, label: lbl, color }) => {
+                          const entry = payload.find((p) => p.dataKey === key);
+                          if (!entry || entry.value == null) return null;
+                          return (
+                            <div key={key} className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                              <span className="text-gray-600">{lbl}:</span>
+                              <span className="font-medium text-gray-900">{formatPrice(entry.value as number)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }}
+                />
                 <Legend />
                 <Area type="monotone" dataKey="bb_upper" stroke="none" fill="#e0e7ff" fillOpacity={0.4} name="BB Upper" />
                 <Area type="monotone" dataKey="bb_lower" stroke="none" fill="#e0e7ff" fillOpacity={0.4} name="BB Lower" />
@@ -124,7 +152,26 @@ export function TechnicalAnalysis({ tickers }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                <Tooltip />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const rsi = payload[0]?.value as number | null;
+                    if (rsi == null) return null;
+                    const zone = rsi >= 70 ? 'Overbought' : rsi <= 30 ? 'Oversold' : 'Neutral';
+                    const zoneColor = rsi >= 70 ? 'text-red-600' : rsi <= 30 ? 'text-green-600' : 'text-gray-500';
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                        <div className="font-semibold text-gray-700 mb-1">{label}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-violet-500" />
+                          <span className="text-gray-600">RSI:</span>
+                          <span className="font-medium text-gray-900">{rsi.toFixed(1)}</span>
+                          <span className={`font-medium ${zoneColor}`}>({zone})</span>
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
                 <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'Overbought', position: 'right', fontSize: 10, fill: '#ef4444' }} />
                 <ReferenceLine y={30} stroke="#22c55e" strokeDasharray="3 3" label={{ value: 'Oversold', position: 'right', fontSize: 10, fill: '#22c55e' }} />
                 <ReferenceLine y={50} stroke="#9ca3af" strokeDasharray="2 4" />
@@ -141,7 +188,32 @@ export function TechnicalAnalysis({ tickers }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const items = [
+                      { key: 'macd', label: 'MACD', color: '#2563eb' },
+                      { key: 'signal', label: 'Signal', color: '#dc2626' },
+                      { key: 'histogram', label: 'Histogram', color: '#93c5fd' },
+                    ];
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                        <div className="font-semibold text-gray-700 mb-1">{label}</div>
+                        {items.map(({ key, label: lbl, color }) => {
+                          const entry = payload.find((p) => p.dataKey === key);
+                          if (!entry || entry.value == null) return null;
+                          return (
+                            <div key={key} className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                              <span className="text-gray-600">{lbl}:</span>
+                              <span className="font-medium text-gray-900">{(entry.value as number).toFixed(4)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }}
+                />
                 <Legend />
                 <ReferenceLine y={0} stroke="#9ca3af" />
                 <Bar dataKey="histogram" name="Histogram" fill="#93c5fd" barSize={3} />

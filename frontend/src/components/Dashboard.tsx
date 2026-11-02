@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Area, AreaChart, ResponsiveContainer } from 'recharts';
+import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { Save, Check } from 'lucide-react';
 import type { QuoteData } from '../types';
 import { formatPrice, formatPct, formatCompact, getTickerColor } from '../utils';
@@ -97,6 +97,16 @@ export function Dashboard({ tickers, quotes, dirty, onSave }: Props) {
                         <stop offset="100%" stopColor={color} stopOpacity={0} />
                       </linearGradient>
                     </defs>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload?.[0]) return null;
+                        return (
+                          <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow">
+                            {formatPrice(payload[0].value as number)}
+                          </div>
+                        );
+                      }}
+                    />
                     <Area
                       type="monotone"
                       dataKey="v"

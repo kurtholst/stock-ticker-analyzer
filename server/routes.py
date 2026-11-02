@@ -15,6 +15,14 @@ from .analysis import (
 )
 from .chat import ChatRequest, get_chat_response
 from .db import execute_sql
+from .patents import (
+    PatentAnalyzeRequest,
+    PatentAnalyzeResponse,
+    PatentSearchResponse,
+    _company_name_for_ticker,
+    analyze_patents_with_gemini,
+    search_epo_patents,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -102,3 +110,33 @@ def rank(request: RankRequest) -> list[dict]:
 def chat(request: ChatRequest) -> dict:
     response = get_chat_response(request)
     return response.model_dump()
+
+
+# --- Patent endpoints ---
+
+
+@router.get("/patents/{ticker}")
+async def get_patents(ticker: str) -> dict:
+    """Search EPO OPS for recent patents by portfolio company."""
+    company_name = _company_name_for_ticker(ticker)
+    patents, error = await search_epo_patents(company_name)
+    resp = PatentSearchResponse(
+        ticker=ticker,
+        company_name=company_name,
+        patents=patents,
+        total_found=len(patents),
+        source="EPO Espacenet",
+        error=error,
+    )
+    return resp.model_dump()
+
+
+@router.post("/patents/analyze")
+async def post_patent_analyze(request: PatentAnalyzeRequest) -> dict:
+    """Analyze patents with Gemini 2.5 Flash AI."""
+    resp = await analyze_patents_with_gemini(
+        patents=request.patents,
+        company_name=request.company_name,
+        ticker=request.ticker,
+    )
+    return resp.model_dump()

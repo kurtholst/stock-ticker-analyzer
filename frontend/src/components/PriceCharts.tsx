@@ -111,7 +111,20 @@ export function PriceCharts({ tickers }: Props) {
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
                 <YAxis yAxisId="price" tick={{ fontSize: 11 }} tickFormatter={(v: number) => formatPrice(v)} />
                 <YAxis yAxisId="vol" orientation="right" tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1e6).toFixed(0)}M`} />
-                <Tooltip />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const close = payload.find((p) => p.dataKey === 'close');
+                    const vol = payload.find((p) => p.dataKey === 'volume');
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                        <div className="font-semibold text-gray-700 mb-1">{label}</div>
+                        {close && <div className="text-gray-900">Close: <span className="font-medium">{formatPrice(close.value as number)}</span></div>}
+                        {vol && <div className="text-gray-500">Volume: <span className="font-medium">{(vol.value as number).toLocaleString()}</span></div>}
+                      </div>
+                    );
+                  }}
+                />
                 <Bar yAxisId="vol" dataKey="volume" fill="#e5e7eb" barSize={4} />
                 <Line yAxisId="price" type="monotone" dataKey="close" stroke={color} strokeWidth={2} dot={false} />
               </ComposedChart>

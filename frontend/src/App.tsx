@@ -9,13 +9,23 @@ import { TechnicalAnalysis } from './components/TechnicalAnalysis';
 import { DataTable } from './components/DataTable';
 import { RankTable } from './components/RankTable';
 import { AiInsightsPanel } from './components/AiInsightsPanel';
+import { PatentAnalysis } from './components/PatentAnalysis';
 
-type Tab = 'dashboard' | 'charts' | 'technicals' | 'table' | 'rank' | 'ai';
+type Tab = 'dashboard' | 'charts' | 'technicals' | 'table' | 'rank' | 'ai' | 'patents';
+
+const VALID_TABS = new Set<Tab>(['dashboard', 'charts', 'technicals', 'table', 'rank', 'ai', 'patents']);
+
+function getInitialTab(): Tab {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+  if (tab && VALID_TABS.has(tab as Tab)) return tab as Tab;
+  return 'dashboard';
+}
 
 export default function App() {
   const [tickers, setTickers] = useState<string[]>([]);
   const [quotes, setQuotes] = useState<Map<string, QuoteData>>(new Map());
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>(getInitialTab);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const savedTickersRef = useRef<string[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -92,6 +102,7 @@ export default function App() {
     { id: 'table', label: 'Data Table' },
     { id: 'rank', label: 'Rank' },
     { id: 'ai', label: 'AI Insights' },
+    { id: 'patents', label: 'Patent AI' },
   ];
 
   return (
@@ -148,6 +159,7 @@ export default function App() {
             {activeTab === 'table' && <DataTable tickers={tickers} />}
             {activeTab === 'rank' && <RankTable tickers={tickers} />}
             {activeTab === 'ai' && <AiInsightsPanel tickers={tickers} quotes={quotes} />}
+            {activeTab === 'patents' && <PatentAnalysis tickers={tickers} />}
           </div>
         </main>
       </div>

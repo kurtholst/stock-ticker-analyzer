@@ -81,3 +81,43 @@ export interface ChatResponseData {
   reply: string;
   model: string;
 }
+
+// --- Patent types ---
+
+export interface PatentResult {
+  patent_number: string;
+  title: string;
+  applicant: string;
+  filing_date: string | null;
+  status: string | null;
+}
+
+export interface PatentScore {
+  patent_number: string;
+  title: string;
+  score: 'POSITIVE' | 'INSIGNIFICANT' | 'NEGATIVE';
+  reasoning: string;
+}
+
+export interface PatentSearchResponse {
+  ticker: string;
+  company_name: string;
+  patents: PatentResult[];
+  total_found: number;
+  source: string;
+  error: string | null;
+}
+
+export interface PatentAnalyzeRequest {
+  ticker: string;
+  company_name: string;
+  patents: PatentResult[];
+}
+
+export interface PatentAnalyzeResponse {
+  ticker: string;
+  company_name: string;
+  scores: PatentScore[];
+  summary: string;
+  model: string;
+}

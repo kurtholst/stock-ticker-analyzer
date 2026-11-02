@@ -1,26 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Info, Loader2 } from 'lucide-react';
 import type { RankRow } from '../types';
 import { fetchRank } from '../api';
 import { formatPrice, formatPct, getTickerColor } from '../utils';
 
 type SortKey = keyof RankRow;
 
-const COLUMNS: { key: SortKey; label: string }[] = [
-  { key: 'ticker', label: 'Ticker' },
-  { key: 'price', label: 'Price' },
-  { key: 'change_1d', label: '1D %' },
-  { key: 'change_1w', label: '1W %' },
-  { key: 'change_1m', label: '1M %' },
-  { key: 'change_3m', label: '3M %' },
-  { key: 'rsi14', label: 'RSI 14' },
-  { key: 'macd_hist', label: 'MACD Hist' },
-  { key: 'bb_pct', label: 'BB %B' },
-  { key: 'ma20_dist', label: 'MA 20 %' },
-  { key: 'ma50_dist', label: 'MA 50 %' },
-  { key: 'ma200_dist', label: 'MA 200 %' },
-  { key: 'vol_ratio', label: 'Vol Ratio' },
-  { key: 'atr14', label: 'ATR 14' },
+const COLUMNS: { key: SortKey; label: string; tip: string }[] = [
+  { key: 'ticker', label: 'Ticker', tip: 'Stock ticker symbol' },
+  { key: 'price', label: 'Price', tip: 'Latest closing price' },
+  { key: 'change_1d', label: '1D %', tip: 'Price change over the last trading day' },
+  { key: 'change_1w', label: '1W %', tip: 'Price change over the last week' },
+  { key: 'change_1m', label: '1M %', tip: 'Price change over the last month' },
+  { key: 'change_3m', label: '3M %', tip: 'Price change over the last 3 months' },
+  { key: 'rsi14', label: 'RSI 14', tip: 'Relative Strength Index (14-day). Above 70 = overbought, below 30 = oversold' },
+  { key: 'macd_hist', label: 'MACD Hist', tip: 'MACD histogram - difference between MACD and signal line. Positive = bullish momentum' },
+  { key: 'bb_pct', label: 'BB %B', tip: 'Bollinger Band %B - position within bands. Above 100% = above upper band, below 0% = below lower band' },
+  { key: 'ma20_dist', label: 'MA 20 %', tip: 'Distance from 20-day moving average. Positive = price above MA' },
+  { key: 'ma50_dist', label: 'MA 50 %', tip: 'Distance from 50-day moving average. Positive = price above MA' },
+  { key: 'ma200_dist', label: 'MA 200 %', tip: 'Distance from 200-day moving average. Positive = price above MA' },
+  { key: 'vol_ratio', label: 'Vol Ratio', tip: 'Volume ratio vs 20-day average. Above 1.5x = unusually high volume' },
+  { key: 'atr14', label: 'ATR 14', tip: 'Average True Range (14-day) - measures daily price volatility' },
 ];
 
 interface Props {
@@ -160,14 +160,23 @@ export function RankTable({ tickers }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  {COLUMNS.map(({ key, label }) => (
+                  {COLUMNS.map(({ key, label, tip }) => (
                     <th
                       key={key}
                       onClick={() => handleSort(key)}
                       className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none whitespace-nowrap"
                     >
-                      <div className="flex items-center gap-1">
-                        {label} <SortIcon col={key} />
+                      <div className="relative group flex items-center gap-1">
+                        {label}
+                        {key !== 'ticker' && key !== 'price' && (
+                          <Info size={10} className="text-gray-300 group-hover:text-blue-400 transition-colors shrink-0" />
+                        )}
+                        <SortIcon col={key} />
+                        <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block pointer-events-none">
+                          <div className="bg-gray-800 text-white text-[11px] font-normal normal-case tracking-normal leading-snug rounded-lg px-3 py-2 shadow-lg whitespace-normal w-52">
+                            {tip}
+                          </div>
+                        </div>
                       </div>
                     </th>
                   ))}

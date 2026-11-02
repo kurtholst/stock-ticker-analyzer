@@ -1,4 +1,13 @@
-import type { QuoteData, HistoryResponse, TechnicalsResponse, ChatResponseData, RankRow } from './types';
+import type {
+  QuoteData,
+  HistoryResponse,
+  TechnicalsResponse,
+  ChatResponseData,
+  RankRow,
+  PatentSearchResponse,
+  PatentAnalyzeRequest,
+  PatentAnalyzeResponse,
+} from './types';
 
 export async function fetchTickers(): Promise<{ tickers: string[] }> {
   const res = await fetch('/stock/api/tickers');
@@ -66,5 +75,23 @@ export async function sendChatMessage(
     body: JSON.stringify({ messages, ticker_context: tickerContext }),
   });
   if (!res.ok) throw new Error('Chat request failed');
+  return res.json();
+}
+
+// --- Patent API ---
+
+export async function fetchPatents(ticker: string): Promise<PatentSearchResponse> {
+  const res = await fetch(`/stock/api/patents/${encodeURIComponent(ticker)}`);
+  if (!res.ok) throw new Error(`Failed to fetch patents for ${ticker}`);
+  return res.json();
+}
+
+export async function analyzePatents(request: PatentAnalyzeRequest): Promise<PatentAnalyzeResponse> {
+  const res = await fetch('/stock/api/patents/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error('Patent analysis failed');
   return res.json();
 }
